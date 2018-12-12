@@ -152,12 +152,13 @@ class WebUISharingContext extends RawMinkContext implements Context {
 		$this->sharingDialog = $this->filesPage->openSharingDialog(
 			$folder, $this->getSession()
 		);
-		$user = $this->featureContext->substituteInLineCodes($user);
 		if ($remote === "remote") {
+			$user = $this->featureContext->substituteInLineCodes($user);
 			$this->sharingDialog->shareWithRemoteUser(
 				$user, $this->getSession(), $maxRetries, $quiet
 			);
 		} else {
+			$user = $this->featureContext->getDisplayNameForUser($user);
 			$this->sharingDialog->shareWithUser(
 				$user, $this->getSession(), $maxRetries, $quiet
 			);
@@ -1107,6 +1108,21 @@ class WebUISharingContext extends RawMinkContext implements Context {
 		);
 		$lastCreatedPublicLink = \end($this->createdPublicLinks);
 		PHPUnit_Framework_Assert::assertContains($lastCreatedPublicLink["url"], $content);
+	}
+
+	/**
+	 * @Then the user should see a error message on the share dialog saying :message
+	 *
+	 * @param string $message
+	 *
+	 * @return void
+	 */
+	public function theUserShouldSeeAErrorMessageOnTheShareDialogSaying($message) {
+		$sharingDialog = $this->filesPage->getSharingDialog();
+		$actualMessage = $sharingDialog->noSharingMessageXpath(
+			$this->getSession()
+		);
+		PHPUnit_Framework_Assert::assertEquals($message, $actualMessage);
 	}
 
 	/**
