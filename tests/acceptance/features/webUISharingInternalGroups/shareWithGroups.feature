@@ -108,17 +108,54 @@ Feature: Sharing files and folders with internal groups
     Then file "lorem.txt" should be listed on the webUI
     And the content of "lorem.txt" should be the same as the original "simple-folder/lorem.txt"
 
-  Scenario: user tries to share a file in a group which is blacklisted from sharing
+  Scenario: user tries to share a file from a group which is blacklisted from sharing
     Given the administrator has browsed to the admin sharing settings page
     When the administrator enables exclude groups from sharing using the webUI
     And the administrator adds group "grp1" to the group sharing blacklist using the webUI
     Then user "user1" should not be able to share file "lorem.txt" with user "user3" using the sharing API
 
-  Scenario: user tries to share a folder in a group which is blacklisted from sharing
+  Scenario: user tries to share a folder from a group which is blacklisted from sharing
     Given the administrator has browsed to the admin sharing settings page
     When the administrator enables exclude groups from sharing using the webUI
     And the administrator adds group "grp1" to the group sharing blacklist using the webUI
     Then user "user1" should not be able to share folder "simple-folder" with user "user3" using the sharing API
+
+  Scenario: member of a blacklisted from sharing group tries to re-share a file received as a share
+    Given user "user4" has been created with default attributes
+    And the administrator has browsed to the admin sharing settings page
+    And user "user3" has shared file "/testimage.jpg" with user "user1"
+    And the administrator has enabled exclude groups from sharing from admin sharing settings page
+    When the administrator adds group "grp1" to the group sharing blacklist using the webUI
+    Then user "user1" should not be able to share file "/testimage (2).jpg" with user "user4" using the sharing API
+
+  Scenario: member of a blacklisted from sharing group tries to re-share a folder received as a share
+    Given user "user4" has been created with default attributes
+    And the administrator has browsed to the admin sharing settings page
+    And user "user3" has created folder "/common"
+    And user "user3" has shared folder "/common" with user "user1"
+    And the administrator has enabled exclude groups from sharing from admin sharing settings page
+    When the administrator adds group "grp1" to the group sharing blacklist using the webUI
+    Then user "user1" should not be able to share folder "/common" with user "user4" using the sharing API
+
+  Scenario: member of a blacklisted from sharing group tries to re-share a file inside a folder received as a share
+    Given user "user4" has been created with default attributes
+    And the administrator has browsed to the admin sharing settings page
+    And user "user3" has created folder "/common"
+    And user "user3" has moved file "/testimage.jpg" to "/common/testimage.jpg"
+    And user "user3" has shared folder "/common" with user "user1"
+    And the administrator has enabled exclude groups from sharing from admin sharing settings page
+    When the administrator adds group "grp1" to the group sharing blacklist using the webUI
+    Then user "user1" should not be able to share file "/common/testimage.jpg" with user "user4" using the sharing API
+
+  Scenario: member of a blacklisted from sharing group tries to re-share a folder inside a folder received as a share
+    Given user "user4" has been created with default attributes
+    And the administrator has browsed to the admin sharing settings page
+    And user "user3" has created folder "/common"
+    And user "user3" has created folder "/common/inside-common"
+    And user "user3" has shared folder "/common" with user "user1"
+    And the administrator has enabled exclude groups from sharing from admin sharing settings page
+    When the administrator adds group "grp1" to the group sharing blacklist using the webUI
+    Then user "user1" should not be able to share folder "/common/inside-common" with user "user4" using the sharing API
 
   Scenario: user tries to share a file in a group which is excluded from receiving share
     Given group "system-group" has been created

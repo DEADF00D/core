@@ -210,6 +210,7 @@ class WebUIAdminSharingSettingsContext extends RawMinkContext implements Context
 
 	/**
 	 * @When the administrator enables exclude groups from sharing using the webUI
+	 * @Given the administrator has enabled exclude groups from sharing from admin sharing settings page
 	 *
 	 * @return void
 	 */
