@@ -45,3 +45,13 @@ Feature: personal general settings
     And the federated cloud id for user "user1" should be displayed on the personal general settings page in the webUI
     And group "new-group" should be displayed on the personal general settings page in the webUI
     And group "another-group" should be displayed on the personal general settings page in the webUI
+
+  Scenario: User sets profile picture from uploaded file
+    Given the user has deleted existing profile picture if any
+    When the user sets profile picture to "testimage.jpg" from the uploaded files using the webUI
+    Then the preview of profile picture should be shown in the webUI
+
+  Scenario: User deletes existing profile picture
+    Given the user has set profile picture to "testimage.jpg" from the uploaded files
+    When the user deletes existing profile picture
+    Then the preview of profile picture should not be shown in the webUI

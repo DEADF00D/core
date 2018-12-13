@@ -244,6 +244,71 @@ class WebUIPersonalGeneralSettingsContext extends RawMinkContext implements Cont
 	}
 
 	/**
+	 * @When the user sets profile picture to :filename from the uploaded files using the webUI
+	 *
+	 * @param string $filename
+	 *
+	 * @return void
+	 */
+	public function theUserSetsProfilePictureToFromTheUploadedFiles($filename) {
+		$this->personalGeneralSettingsPage->setProfilePicture($filename, $this->getSession());
+	}
+
+	/**
+	 * @Given the user has set profile picture to :filename from the uploaded files
+	 *
+	 * @param string $filename
+	 *
+	 * @return void
+	 */
+	public function theUserHasSetProfilePictureToFromTheUploadedFiles($filename) {
+		$this->theUserSetsProfilePictureToFromTheUploadedFiles($filename);
+		$this->thePreviewOfProfilePictureShouldBeShownInTheWebui("");
+	}
+
+	/**
+	 * @Then /^the preview of profile picture should (not|)\s?be shown in the webUI$/
+	 *
+	 * @param string $shouldOrNot
+	 *
+	 * @return void
+	 */
+	public function thePreviewOfProfilePictureShouldBeShownInTheWebui($shouldOrNot) {
+		if ($shouldOrNot !== "not") {
+			PHPUnit_Framework_Assert::assertTrue(
+				$this->personalGeneralSettingsPage->isProfilePicturePreviewDisplayed()
+			);
+		} else {
+			PHPUnit_Framework_Assert::assertFalse(
+				$this->personalGeneralSettingsPage->isProfilePicturePreviewDisplayed()
+			);
+		}
+	}
+
+	/**
+	 * @When the user deletes existing profile picture
+	 *
+	 * @return void
+	 */
+	public function theUserDeletesExistingProfilePicture() {
+		if ($this->personalGeneralSettingsPage->isProfilePicturePreviewDisplayed()) {
+			$this->personalGeneralSettingsPage->deleteProfilePicture($this->getSession());
+		}
+	}
+
+	/**
+	 * @Given the user has deleted existing profile picture if any
+	 *
+	 * @return void
+	 */
+	public function theUserHasDeletedExistingProfilePictureIfAny() {
+		$this->theUserDeletesExistingProfilePicture();
+		PHPUnit_Framework_Assert::assertFalse(
+			$this->personalGeneralSettingsPage->isProfilePicturePreviewDisplayed()
+		);
+	}
+
+	/**
 	 * This will run before EVERY scenario.
 	 * It will set the properties for this object.
 	 *
