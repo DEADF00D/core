@@ -43,31 +43,52 @@ class LockMapperTest extends TestCase {
 	private $account;
 	/** @var int */
 	private $fileCacheId;
+	/** @var int */
+	private $fileCacheParentId;
+	/** @var int */
+	private $storageId;
+	/** @var int */
+	private $unrelatedStorageId;
 	/** @var LockMapper */
 	private $mapper;
 	/** @var Lock[] */
 	private $locks = [];
 	/** @var string */
+	private $parentPath;
+	/** @var string */
 	private $path;
 	/** @var ITimeFactory */
 	private $timeFactory;
+
+	private function insertFileCacheEntry($storage, $path) {
+		$insertFileCache = $this->db->getQueryBuilder();
+		$insertFileCache->insert('filecache')
+			->values([
+				'storage' => $insertFileCache->createNamedParameter($storage),
+				'name' => $insertFileCache->createNamedParameter(basename($path)),
+				'path' => $insertFileCache->createNamedParameter($path),
+				'path_hash' => $insertFileCache->createNamedParameter(\md5($path))
+			])
+			->execute();
+		return $insertFileCache->getLastInsertId();
+	}
 
 	public function setUp() {
 		parent::setUp();
 
 		$this->db = \OC::$server->getDatabaseConnection();
 
-		// insert test entity in file cache
-		$insertFileCache = $this->db->getQueryBuilder();
-		$this->path = \uniqid('/foo_foo/bar', true);
-		$insertFileCache->insert('filecache')
-			->values([
-				'storage' => 666,
-				'path' => $insertFileCache->createNamedParameter($this->path),
-				'path_hash' => $insertFileCache->createNamedParameter(\md5($this->path))
-			])
-			->execute();
-		$this->fileCacheId = $insertFileCache->getLastInsertId();
+		$this->storageId = 666;
+		$this->unrelatedStorageId = 667;
+		$this->parentPath = 'foo_foo';
+		$this->path = 'foo_foo/bar';
+
+		// insert test entities in file cache
+		$this->fileCacheParentId = $this->insertFileCacheEntry($this->storageId, $this->parentPath);
+		$this->fileCacheId = $this->insertFileCacheEntry($this->storageId, $this->path);
+		// unrelated entries
+		$this->insertFileCacheEntry($this->unrelatedStorageId, $this->parentPath);
+		$this->insertFileCacheEntry($this->unrelatedStorageId, $this->path);
 
 		// insert test entity in account table
 		$this->account = new Account();
@@ -104,7 +125,10 @@ class LockMapperTest extends TestCase {
 
 		$q = $this->db->getQueryBuilder();
 		$q->delete('filecache')
-			->where($q->expr()->eq('fileid', $q->createNamedParameter($this->fileCacheId)))
+			->where($q->expr()->eq('storage', $q->createNamedParameter($this->storageId)))
+			->execute();
+		$q->delete('filecache')
+			->where($q->expr()->eq('storage', $q->createNamedParameter($this->unrelatedStorageId)))
 			->execute();
 
 		\OC::$server->getAccountMapper()
@@ -122,7 +146,7 @@ class LockMapperTest extends TestCase {
 		$lock->setTimeout(1880);
 		$lock->setScope(ILock::LOCK_SCOPE_EXCLUSIVE);
 		$lock->setOwnerAccountId($this->account->getId());
-		$lock->setDepth(0);
+		$lock->setDepth(-1);
 		$this->mapper->insert($lock);
 
 		$this->locks[]= $lock;
@@ -130,14 +154,114 @@ class LockMapperTest extends TestCase {
 		$l = $this->mapper->getLockByToken($token);
 		$this->assertLock($lock, $l);
 
-		$l = $this->mapper->getLocksByPath(666, $this->path, false);
-		$this->assertLock($lock, $l[0]);
+		$this->mapper->deleteByFileIdAndToken($this->fileCacheId, $token);
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, false);
+		$this->assertCount(0, $l);
+	}
 
-		$l = $this->mapper->getLocksByPath(666, $this->path, true);
-		$this->assertLock($lock, $l[0]);
+	public function testGetLocksByPathDepth0() {
+		$lock = new Lock();
+		$token = \uniqid('tok', true);
+		$lock->setFileId($this->fileCacheId);
+		$lock->setToken($token);
+		$lock->setCreatedAt(\time());
+		$lock->setTimeout(1880);
+		$lock->setScope(ILock::LOCK_SCOPE_EXCLUSIVE);
+		$lock->setOwnerAccountId($this->account->getId());
+		$lock->setDepth(0);
+		$this->mapper->insert($lock);
+
+		$this->locks[]= $lock;
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, false);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query on child path returns lock with depth 0');
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->parentPath, false);
+		$this->assertCount(0, $l, 'query on parent path returns no lock with depth 0');
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, true);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query+children on child path returns lock with depth 0');
+
+		// parent is able to retrieve for children when asking for children
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->parentPath, true);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query+children on parent returns lock with depth 0 from the child');
+
+		// unrelated storage with same paths
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->path, false);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->path, true);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->parentPath, false);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->parentPath, true);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
 
 		$this->mapper->deleteByFileIdAndToken($this->fileCacheId, $token);
-		$l = $this->mapper->getLocksByPath(666, $this->path, false);
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, false);
+		$this->assertCount(0, $l);
+	}
+
+	public function providesNonZeroDepth() {
+		return [
+			[1],
+			[-1], // infinity
+		];
+	}
+
+	/**
+	 * @dataProvider providesNonZeroDepth
+	 */
+	public function testGetLocksByPathNonZeroDepth($depth) {
+		$lock = new Lock();
+		$token = \uniqid('tok', true);
+		$lock->setFileId($this->fileCacheParentId);
+		$lock->setToken($token);
+		$lock->setCreatedAt(\time());
+		$lock->setTimeout(1880);
+		$lock->setScope(ILock::LOCK_SCOPE_EXCLUSIVE);
+		$lock->setOwnerAccountId($this->account->getId());
+		$lock->setDepth($depth);
+		$this->mapper->insert($lock);
+
+		$this->locks[]= $lock;
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, false);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query on child path returns lock with depth 1 from parent');
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->parentPath, false);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query on parent path returns lock with depth 1 from parent');
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, true);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query+children on child path returns lock with depth 1 from parent');
+
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->parentPath, true);
+		$this->assertCount(1, $l);
+		$this->assertLock($lock, $l[0], 'query+children on parent path returns lock with depth 1 from parent');
+
+		// unrelated storage with same paths
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->path, false);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->path, true);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->parentPath, false);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$l = $this->mapper->getLocksByPath($this->unrelatedStorageId, $this->parentPath, true);
+		$this->assertEmpty($l, 'query on unrelated storage yields no result');
+
+		$this->mapper->deleteByFileIdAndToken($this->fileCacheId, $token);
+		$l = $this->mapper->getLocksByPath($this->storageId, $this->path, false);
 		$this->assertCount(0, $l);
 	}
 
